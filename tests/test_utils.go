@@ -3,6 +3,9 @@ package tests
 import (
 	"context"
 	"fmt"
+	"github.com/mwangaben/factory/factory"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm/logger"
 	"os"
 	"testing"
 	"time"
@@ -145,4 +148,47 @@ func CleanupTestDB(db *gorm.DB) {
 			sqlDB.Close()
 		}
 	}
+}
+
+// SetupTestDBPost sets up a test database using PostgreSQL and factory helper
+func SetupTestDBPost(t *testing.T) *gorm.DB {
+	// Get database configuration from environment with PostgreSQL defaults
+	dbHost := getEnv("DB_HOST", "localhost")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbUser := getEnv("DB_USER", "benedictmwanga")
+	dbPassword := getEnv("DB_PASSWORD", "")
+	dbName := getEnv("DB_NAME", "auth_test")
+	dbSSLMode := getEnv("DB_SSLMODE", "disable")
+
+	// Build DSN for PostgreSQL
+	var dsn string
+	if dbPassword != "" {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			dbHost, dbPort, dbUser, dbPassword, dbName, dbSSLMode)
+	} else {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=%s",
+			dbHost, dbPort, dbUser, dbName, dbSSLMode)
+	}
+
+	// Connect to database
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Use factory helper to refresh database
+	// This will drop all tables and recreate them with proper PostgreSQL syntax
+	err = factory.NewDatabaseHelper(db).RefreshDatabase(
+		&TestUser{},
+		&models.Client{},
+		&models.Token{},
+		&models.PersonalAccessToken{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to refresh database: %v", err)
+	}
+
+	return db
 }

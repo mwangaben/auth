@@ -10,7 +10,7 @@ import (
 )
 
 func TestPassport(t *testing.T) {
-	db := SetupTestDB(t)
+	db := SetupTestDBPost(t)
 	defer CleanupTestDB(db)
 
 	userProvider := &TestUserProvider{db: db}
