@@ -7,11 +7,12 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-) // Manager handles JWT operations
+	"time"
+)
+
+// Manager handles JWT operations
 
 type Manager struct {
 	privateKey *rsa.PrivateKey

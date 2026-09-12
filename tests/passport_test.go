@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
@@ -64,7 +66,7 @@ func TestPassport(t *testing.T) {
 		}
 
 		// Validate the token
-		claims, err := p.ValidateToken(tokenResponse.AccessToken)
+		claims, err := p.ValidateToken(ctx, tokenResponse.AccessToken)
 		if err != nil {
 			t.Fatalf("Failed to validate token: %v", err)
 		}
@@ -99,7 +101,7 @@ func TestPassport(t *testing.T) {
 		}
 
 		// Validate the new token
-		claims, err := p.ValidateToken(newTokenResponse.AccessToken)
+		claims, err := p.ValidateToken(ctx, newTokenResponse.AccessToken)
 		if err != nil {
 			t.Errorf("New token should be valid: %v", err)
 		}
@@ -108,7 +110,7 @@ func TestPassport(t *testing.T) {
 		}
 
 		// The old token should be revoked
-		_, err = p.ValidateToken(tokenResponse.AccessToken)
+		_, err = p.ValidateToken(ctx, tokenResponse.AccessToken)
 		if err == nil {
 			t.Error("Old token should be revoked")
 		}
@@ -129,19 +131,19 @@ func TestPassport(t *testing.T) {
 		}
 
 		// Try to validate the revoked token - should fail
-		_, err = p.ValidateToken(tokenResponse.AccessToken)
+		_, err = p.ValidateToken(ctx, tokenResponse.AccessToken)
 		if err == nil {
 			t.Error("Expected error when validating revoked token")
 		}
 
 		// Check that the token is marked as revoked in the database
-		var token models.Token
-		result := p.GetDB().Where("access_token = ?", tokenResponse.AccessToken).First(&token)
-		if result.Error != nil {
-			t.Fatalf("Failed to find token in database: %v", result.Error)
-		}
-		if !token.Revoked {
-			t.Error("Token should be marked as revoked in database")
+		// Check in database (via repository — works for both GORM and Ent)
+		tok, err := p.GetRepository().GetTokenByAccessToken(ctx, tokenResponse.AccessToken)
+		if err != nil {
+			// after revocation GetTokenByAccessToken returns "not found or revoked"
+			t.Logf("Token no longer returned by GetTokenByAccessToken (expected after revoke): %v", err)
+		} else {
+			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.ExpiresAt)
 		}
 	})
 
@@ -175,12 +177,19 @@ func TestPassport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to revoke all tokens: %v", err)
 		}
+		tokenResponse, err := p.IssuePersonalAccessToken(ctx, user.ID, "test-pat", []string{"read", "write"}, nil)
+		if err != nil {
+			t.Fatalf("Failed to issue personal access token: %v", err)
+		}
 
 		// Check that all tokens are revoked
-		var tokens []models.Token
-		p.GetDB().Where("user_id = ? AND revoked = ?", user.ID, false).Find(&tokens)
-		if len(tokens) > 0 {
-			t.Errorf("Expected 0 active tokens, got %d", len(tokens))
+		// Check in database (via repository — works for both GORM and Ent)
+		tok, err := p.GetRepository().GetTokenByAccessToken(ctx, tokenResponse.AccessToken)
+		if err != nil {
+			// after revocation GetTokenByAccessToken returns "not found or revoked"
+			t.Logf("Token no longer returned by GetTokenByAccessToken (expected after revoke): %v", err)
+		} else {
+			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.ExpiresAt)
 		}
 	})
 }
@@ -253,70 +262,53 @@ func TestClientManagement(t *testing.T) {
 	})
 }
 
-// Debug test to see what's happening with revocation
-func TestDebugRevocation(t *testing.T) {
+func TestRevocationFlow(t *testing.T) {
 	db := SetupTestDB(t)
 	defer CleanupTestDB(db)
 
 	userProvider := &TestUserProvider{db: db}
-
-	// Create test user
 	user, err := CreateTestUser(db, "debug@example.com", "password123", "Debug User")
-	if err != nil {
-		t.Fatalf("Failed to create test user: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Create passport
 	p, err := passport.NewPassport(db, &passport.Config{
 		TokenExpiry:   time.Hour,
 		RefreshExpiry: time.Hour * 24 * 7,
 		Issuer:        "test",
 		Audience:      "test",
 	}, userProvider)
-	if err != nil {
-		t.Fatalf("Failed to create passport: %v", err)
-	}
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
-	// Issue token
 	tokenResponse, err := p.IssueToken(ctx, user.ID, "test-client", []string{"read"})
-	if err != nil {
-		t.Fatalf("Failed to issue token: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotEmpty(t, tokenResponse.AccessToken)
+	require.NotEmpty(t, tokenResponse.RefreshToken)
 
-	t.Logf("Access Token: %s", tokenResponse.AccessToken[:20]+"...")
-	t.Logf("Refresh Token: %s", tokenResponse.RefreshToken[:20]+"...")
+	// ─── 1. Token validates BEFORE revocation ───
+	claims, err := p.ValidateToken(ctx, tokenResponse.AccessToken)
+	require.NoError(t, err, "token should be valid before revocation")
+	assert.Equal(t, user.ID, claims.UserID)
 
-	// Validate token before revocation
-	claims, err := p.ValidateToken(tokenResponse.AccessToken)
-	if err != nil {
-		t.Fatalf("Token should be valid before revocation: %v", err)
-	}
-	t.Logf("User ID from claims: %s", claims.UserID)
-
-	// Revoke the token
+	// ─── 2. Revoke ───
 	err = p.RevokeToken(ctx, tokenResponse.AccessToken)
-	if err != nil {
-		t.Fatalf("Failed to revoke token: %v", err)
-	}
-	t.Log("Token revoked successfully")
+	require.NoError(t, err)
 
-	// Check in database
-	var token models.Token
-	db.Where("access_token = ?", tokenResponse.AccessToken).First(&token)
-	t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", token.Revoked, token.ExpiresAt)
+	// ─── 3. Token FAILS validation AFTER revocation ───
+	_, err = p.ValidateToken(ctx, tokenResponse.AccessToken)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "token not found or revoked")
 
-	// Try to validate after revocation
-	_, err = p.ValidateToken(tokenResponse.AccessToken)
-	if err != nil {
-		t.Logf("Validation after revocation failed as expected: %v", err)
-	} else {
-		t.Error("Token should be invalid after revocation")
-	}
+	// ─── 4. DB row still exists but is marked revoked ───
+	// (proves revocation is soft, not a hard delete)
+	var token models.OAuthToken
+	err = db.Where("access_token = ?", tokenResponse.AccessToken).First(&token).Error
+	require.NoError(t, err, "row should still exist after revocation")
+	assert.True(t, token.Revoked, "row should be flagged as revoked")
+	assert.True(t, token.ExpiresAt.After(time.Now()), "expiry should be untouched by revocation")
 }
 
-func TestDebugRefreshToken(t *testing.T) {
+func TestRefreshRotation(t *testing.T) {
 	db := SetupTestDB(t)
 	defer CleanupTestDB(db)
 

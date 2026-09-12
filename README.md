@@ -27,8 +27,8 @@ go get github.com/mwangaben/auth
 ```go
 import (
     "github.com/mwangaben/auth/passport"
-    "gorm.io/driver/sqlite"
-    "gorm.io/gorm"
+    "gormstore.io/driver/sqlite"
+    "gormstore.io/gormstore"
 )
 
 db, _ := gorm.Open(sqlite.Open("auth.db"), &gorm.Config{})

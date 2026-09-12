@@ -92,13 +92,15 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	)
 
 	// Connect to database
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	// Auto migrate models
-	if err := db.AutoMigrate(&TestUser{}, &models.Client{}, &models.Token{}, &models.PersonalAccessToken{}); err != nil {
+	if err := db.AutoMigrate(&TestUser{}, &models.OAuthClient{}, &models.OAuthToken{}, &models.OAuthPersonalAccessToken{}); err != nil {
 		t.Fatalf("Failed to migrate: %v", err)
 	}
 
@@ -182,9 +184,9 @@ func SetupTestDBPost(t *testing.T) *gorm.DB {
 	// This will drop all tables and recreate them with proper PostgreSQL syntax
 	err = factory.NewDatabaseHelper(db).RefreshDatabase(
 		&TestUser{},
-		&models.Client{},
-		&models.Token{},
-		&models.PersonalAccessToken{},
+		&models.OAuthClient{},
+		&models.OAuthToken{},
+		&models.OAuthPersonalAccessToken{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to refresh database: %v", err)

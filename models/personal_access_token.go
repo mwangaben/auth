@@ -7,7 +7,7 @@ import (
 )
 
 // PersonalAccessToken represents a personal access token
-type PersonalAccessToken struct {
+type OAuthPersonalAccessToken struct {
 	ID        string         `gorm:"primaryKey;type:varchar(100)" json:"id"`
 	TokenID   string         `gorm:"type:varchar(100);index" json:"token_id"`
 	UserID    string         `gorm:"type:varchar(255);index" json:"user_id"`
@@ -20,6 +20,6 @@ type PersonalAccessToken struct {
 }
 
 // TableName specifies the table name
-func (PersonalAccessToken) TableName() string {
+func (OAuthPersonalAccessToken) TableName() string {
 	return "oauth_personal_access_tokens"
 }

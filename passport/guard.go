@@ -5,32 +5,30 @@ import (
 	"errors"
 	"strings"
 
-	_ "github.com/mwangaben/auth/jwt"
-	"github.com/mwangaben/auth/models"
+	"github.com/mwangaben/auth/jwt"
 )
 
-// Guard handles authentication
+// Guard handles authentication helpers around Passport.
 type Guard struct {
 	passport *Passport
 }
 
-// NewGuard creates a new Guard instance
+// NewGuard creates a new Guard.
 func NewGuard(passport *Passport) *Guard {
 	return &Guard{passport: passport}
 }
 
-// Check checks if a user is authenticated
+// Check reports whether the context contains an authenticated user.
 func (g *Guard) Check(ctx context.Context) bool {
-	user := g.User(ctx)
-	return user != nil
+	return g.User(ctx) != nil
 }
 
-// Guest checks if a user is not authenticated
+// Guest is the inverse of Check.
 func (g *Guard) Guest(ctx context.Context) bool {
 	return !g.Check(ctx)
 }
 
-// User returns the authenticated user
+// User returns the authenticated user from the context, if any.
 func (g *Guard) User(ctx context.Context) interface{} {
 	if user, ok := ctx.Value("user").(interface{}); ok {
 		return user
@@ -38,7 +36,7 @@ func (g *Guard) User(ctx context.Context) interface{} {
 	return nil
 }
 
-// ID returns the authenticated user ID
+// ID returns the authenticated user's ID, or "" if unauthenticated.
 func (g *Guard) ID(ctx context.Context) string {
 	if user := g.User(ctx); user != nil {
 		return g.passport.userProvider.GetUserID(user)
@@ -46,34 +44,27 @@ func (g *Guard) ID(ctx context.Context) string {
 	return ""
 }
 
-// Validate validates a token and returns the user
+// Validate validates a token string and returns the associated user.
 func (g *Guard) Validate(ctx context.Context, tokenString string) (interface{}, error) {
-	// Remove Bearer prefix if present
 	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 	tokenString = strings.TrimSpace(tokenString)
 
-	// Validate token
 	claims, err := g.passport.jwtManager.ValidateToken(tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if token exists in database
-	var token models.Token
-	if err := g.passport.db.Where("access_token = ? AND revoked = ?", tokenString, false).First(&token).Error; err != nil {
+	tok, err := g.passport.repo.GetTokenByAccessToken(ctx, tokenString)
+	if err != nil {
 		return nil, errors.New("token not found or revoked")
 	}
-
-	// Check if token has expired
-	if token.IsExpired() {
+	if tok.IsExpired() {
 		return nil, errors.New("token has expired")
 	}
 
-	// Get user
-	user, err := g.passport.userProvider.FindByID(ctx, claims.UserID)
-	if err != nil {
-		return nil, err
-	}
+	_ = claims // retained for future use (e.g., scope checks)
 
-	return user, nil
+	return g.passport.userProvider.FindByID(ctx, claims.UserID)
 }
+
+var _ = jwt.Claims{} // keep the jwt import; remove if unused

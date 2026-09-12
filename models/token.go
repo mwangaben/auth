@@ -8,7 +8,7 @@ import (
 )
 
 // Token represents an OAuth token
-type Token struct {
+type OAuthToken struct {
 	ID           string         `gorm:"primaryKey;type:varchar(100)" json:"id"`
 	UserID       string         `gorm:"type:varchar(255);index" json:"user_id"`
 	ClientID     string         `gorm:"type:varchar(100);index" json:"client_id"`
@@ -24,22 +24,22 @@ type Token struct {
 }
 
 // TableName specifies the table name
-func (Token) TableName() string {
+func (OAuthToken) TableName() string {
 	return "oauth_access_tokens"
 }
 
 // IsValid checks if the token is valid
-func (t *Token) IsValid() bool {
+func (t *OAuthToken) IsValid() bool {
 	return !t.Revoked && t.ExpiresAt.After(time.Now()) && t.DeletedAt.Time.IsZero()
 }
 
 // IsExpired checks if the token has expired
-func (t *Token) IsExpired() bool {
+func (t *OAuthToken) IsExpired() bool {
 	return t.ExpiresAt.Before(time.Now())
 }
 
 // GetScopes returns the scopes as a slice
-func (t *Token) GetScopes() []string {
+func (t *OAuthToken) GetScopes() []string {
 	if t.Scopes == "" {
 		return []string{}
 	}
@@ -48,6 +48,6 @@ func (t *Token) GetScopes() []string {
 }
 
 // SetScopes sets the scopes from a slice
-func (t *Token) SetScopes(scopes []string) {
+func (t *OAuthToken) SetScopes(scopes []string) {
 	t.Scopes = strings.Join(scopes, ",")
 }
