@@ -165,3 +165,12 @@ func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
+
+// GetUserID extracts the user ID from an opaque user value using the
+// configured UserProvider. Returns "" if the value is not a recognized user.
+func (p *Passport) GetUserID(user interface{}) string {
+	if user == nil {
+		return ""
+	}
+	return p.userProvider.GetUserID(user)
+}

@@ -37,7 +37,7 @@ func AuthMiddleware(p *passport.Passport) func(http.Handler) http.Handler {
 			tokenString := parts[1]
 
 			// Validate token
-			claims, err := p.ValidateToken(tokenString)
+			claims, err := p.ValidateToken(r.Context(), tokenString)
 			if err != nil {
 				http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
 				return
