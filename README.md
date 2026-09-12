@@ -1,19 +1,21 @@
-# Auth Package
+# Auth
 
 A Laravel Passport-like authentication package for Go with JWT support.
 
 ## Features
 
 - ✅ OAuth2 server implementation
-- ✅ JWT token generation and validation
+- ✅ JWT token generation and validation (RS256)
 - ✅ Personal access tokens
-- ✅ Refresh tokens
-- ✅ Client management
+- ✅ Refresh tokens (with rotation)
+- ✅ Client management (bcrypt-hashed secrets)
 - ✅ Password grant flow
 - ✅ Token revocation
-- ✅ Middleware support
-- ✅ GORM integration
-- ✅ Full test coverage
+- ✅ Middleware support (net/http, pluggable)
+- ✅ **GORM integration**
+- ✅ **Ent integration**
+- ✅ Storage backend auto-detection
+- ✅ Full test coverage (both backends)
 
 ## Installation
 
@@ -21,17 +23,45 @@ A Laravel Passport-like authentication package for Go with JWT support.
 go get github.com/mwangaben/auth
 ```
 
+## Storage Backends
+
+Passport is storage-agnostic. It ships with two backends:
+
+| Backend | Driver constant | Pass to `NewPassport` |
+|---|---|---|
+| GORM | `storage.DriverGorm` | `*gorm.DB` |
+| Ent  | `storage.DriverEnt`  | `*ent.Client` |
+
+The backend is **auto-detected** from the type of the `db` argument. You can
+also force one via `Config.StorageDriver`:
+
+```go
+p, err := passport.NewPassport(db, &passport.Config{
+    // ...
+    StorageDriver: "ent", // or "gorm"
+}, userProvider)
+```
+
+Both backends share the same SQL table names (`oauth_clients`,
+`oauth_access_tokens`, `oauth_personal_access_tokens`), so a database created
+by one can be read by the other.
+
 ## Quick Start
 
 ### 1. Create a Passport instance
+
+#### With GORM
+
 ```go
 import (
+    "time"
+
     "github.com/mwangaben/auth/passport"
-    "gormstore.io/driver/sqlite"
-    "gormstore.io/gormstore"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
 )
 
-db, _ := gorm.Open(sqlite.Open("auth.db"), &gorm.Config{})
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 p, err := passport.NewPassport(db, &passport.Config{
     TokenExpiry:   time.Hour * 24,
@@ -41,52 +71,229 @@ p, err := passport.NewPassport(db, &passport.Config{
 }, userProvider)
 ```
 
-### 2. Implement UserProvider
+#### With Ent
 
 ```go
+import (
+    "time"
+
+    "entgo.io/ent/dialect"
+    entsql "entgo.io/ent/dialect/sql"
+    _ "github.com/lib/pq"
+
+    "github.com/mwangaben/auth/passport"
+    "github.com/yourorg/yourapp/ent"
+)
+
+drv, _ := entsql.Open(dialect.Postgres, dsn)
+client := ent.NewClient(ent.Driver(drv))
+defer client.Close()
+
+p, err := passport.NewPassport(client, &passport.Config{
+    TokenExpiry:   time.Hour * 24,
+    RefreshExpiry: time.Hour * 24 * 7,
+    Issuer:        "myapp",
+    Audience:      "myapp",
+}, userProvider)
+```
+
+### 2. Implement `UserProvider`
+
+Passport doesn't know about your user model. You provide four methods:
+
+```go
+import (
+    "context"
+    "github.com/mwangaben/auth/passport"
+)
+
 type UserProvider struct {
     db *gorm.DB
 }
 
 func (p *UserProvider) FindByCredentials(ctx context.Context, email, password string) (interface{}, error) {
-    // Find user by email and verify password
+    var user User
+    if err := p.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+        return nil, err
+    }
+    if !passport.VerifyPassword(user.Password, password) {
+        return nil, nil
+    }
+    return &user, nil
 }
 
 func (p *UserProvider) FindByID(ctx context.Context, id string) (interface{}, error) {
-    // Find user by ID
+    var user User
+    if err := p.db.WithContext(ctx).Where("id = ?", id).First(&user).Error; err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+func (p *UserProvider) FindByEmail(ctx context.Context, email string) (interface{}, error) {
+    var user User
+    if err := p.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+        return nil, err
+    }
+    return &user, nil
 }
 
 func (p *UserProvider) GetUserID(user interface{}) string {
-    // Return user ID as string
+    if u, ok := user.(*User); ok {
+        return u.ID
+    }
+    return ""
 }
 ```
 
 ### 3. Issue Tokens
 
 ```go
-// Issue a token
+// Access + refresh token pair (typical login flow)
 token, err := p.IssueToken(ctx, userID, clientID, []string{"read", "write"})
 
-// Issue a personal access token
-token, err := p.IssuePersonalAccessToken(ctx, userID, "My Token", []string{"read"}, nil)
+// Personal access token (long-lived, no refresh token)
+token, err := p.IssuePersonalAccessToken(ctx, userID, "My CLI Token", []string{"read"}, nil)
 ```
 
-### 4. Use Middleware
+`IssueToken` returns a `*TokenResponse`:
 
 ```go
-http.Handle("/protected", middleware.AuthMiddleware(p)(protectedHandler))
+type TokenResponse struct {
+    AccessToken  string `json:"access_token"`
+    RefreshToken string `json:"refresh_token,omitempty"`
+    TokenType    string `json:"token_type"`
+    ExpiresIn    int64  `json:"expires_in"`
+}
 ```
 
-### Testing
+### 4. Validate Tokens
+
+```go
+claims, err := p.ValidateToken(ctx, tokenString)
+if err != nil {
+    // token is invalid, expired, or revoked
+}
+
+userID := claims.UserID
+scopes := claims.Scopes
+```
+
+Validation checks **both** the JWT signature and the database record (revocation,
+expiry). A token must pass both to be considered valid.
+
+### 5. Refresh Tokens
+
+```go
+newToken, err := p.RefreshToken(ctx, refreshToken)
+```
+
+Refresh is a **rotation**: the old refresh token is revoked, and a new access +
+refresh pair is issued. Reusing an old refresh token will fail.
+
+### 6. Revoke Tokens
+
+```go
+// Revoke a single access token
+err := p.RevokeToken(ctx, accessToken)
+
+// Revoke every active token for a user (logout everywhere)
+err := p.RevokeAllTokens(ctx, userID)
+```
+
+### 7. Client Management
+
+```go
+// Create a client — the plain-text secret is returned only once
+client, secret, err := p.CreateClient(ctx, "My App", "https://example.com/callback", false, false)
+
+// Verify a client secret
+ok := p.VerifyClientSecret(client, presentedSecret)
+
+// Revoke a client
+err = p.RevokeClient(ctx, client.ID)
+```
+
+### 8. Middleware
+
+```go
+import "github.com/mwangaben/auth/middleware"
+
+mux := http.NewServeMux()
+mux.Handle("/protected", middleware.AuthMiddleware(p)(protectedHandler))
+```
+
+Inside the handler:
+
+```go
+func protectedHandler(w http.ResponseWriter, r *http.Request) {
+    user := middleware.GetUserFromContext(r.Context())      // interface{}
+    claims := middleware.GetTokenFromContext(r.Context())   // *jwt.Claims
+    // ...
+}
+```
+
+## Configuration
+
+```go
+type Config struct {
+    // RS256 signing keys. If both are nil, a fresh key pair is generated
+    // on startup. In production, provide these to persist across restarts.
+    PrivateKey []byte
+    PublicKey  []byte
+
+    // Lifetime of access tokens. Defaults to 24h.
+    TokenExpiry time.Duration
+
+    // Lifetime of refresh tokens. Defaults to 7 days.
+    RefreshExpiry time.Duration
+
+    // Standard JWT claims.
+    Issuer   string
+    Audience string
+
+    // "gorm" | "ent" | "" (auto-detect).
+    StorageDriver string
+}
+```
+
+## Testing
+
+The test suite exercises **both** backends against a real Postgres database:
+
 ```bash
-make test
-make test-cover
+# Run everything with the race detector
+go test ./... -race -count=1
+
+# Just the shared cross-backend conformance suite
+go test ./tests/... -run TestBackends -v
 ```
 
-### License
-##### MIT
+Test databases are created and torn down by the helpers in `tests/test_utils.go`.
+Set `DB_*` environment variables to point at a different Postgres instance:
 
+```bash
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=postgres
+export DB_PASSWORD=secret
+export DB_NAME=auth_test
+export DB_SSLMODE=disable
+```
 
+## Dependency Graph
 
+```
+passport ──► jwt
+    │
+    └──► storage ──► gormstore ──► models
+              │
+              └──► entstore ──► storage/entstore/ent (generated)
+```
 
+`jwt` is a leaf package — it has no internal dependencies. `passport`
+orchestrates token policy; the storage layer only handles persistence.
 
+## License
+
+MIT
