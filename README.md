@@ -11,11 +11,12 @@ A Laravel Passport-like authentication package for Go with JWT support.
 - ✅ Client management (bcrypt-hashed secrets)
 - ✅ Password grant flow
 - ✅ Token revocation
-- ✅ Middleware support (net/http, pluggable)
+- ✅ Middleware support (`net/http`, pluggable)
 - ✅ **GORM integration**
 - ✅ **Ent integration**
-- ✅ Storage backend auto-detection
+- ✅ **Storage backend auto-detection**
 - ✅ Full test coverage (both backends)
+- ✅ Zero runtime dependencies beyond GORM, Ent, and the standard library
 
 ## Installation
 
@@ -29,11 +30,11 @@ Passport is storage-agnostic. It ships with two backends:
 
 | Backend | Driver constant | Pass to `NewPassport` |
 |---|---|---|
-| GORM | `storage.DriverGorm` | `*gorm.DB` |
-| Ent  | `storage.DriverEnt`  | `*ent.Client` |
+| GORM | `storage.DriverGorm` | `*gorm.DB` from `gorm.io/gorm` |
+| Ent  | `storage.DriverEnt`  | `*ent.Client` from `github.com/mwangaben/auth/storage/entstore/ent` |
 
 The backend is **auto-detected** from the type of the `db` argument. You can
-also force one via `Config.StorageDriver`:
+also force one explicitly via `Config.StorageDriver`:
 
 ```go
 p, err := passport.NewPassport(db, &passport.Config{
@@ -43,8 +44,8 @@ p, err := passport.NewPassport(db, &passport.Config{
 ```
 
 Both backends share the same SQL table names (`oauth_clients`,
-`oauth_access_tokens`, `oauth_personal_access_tokens`), so a database created
-by one can be read by the other.
+`oauth_access_tokens`, `oauth_personal_access_tokens`). A database created by
+one backend can be read by the other without migration.
 
 ## Quick Start
 
@@ -61,7 +62,10 @@ import (
     "gorm.io/gorm"
 )
 
-db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+if err != nil {
+    log.Fatalf("failed to open gorm: %v", err)
+}
 
 p, err := passport.NewPassport(db, &passport.Config{
     TokenExpiry:   time.Hour * 24,
@@ -69,6 +73,9 @@ p, err := passport.NewPassport(db, &passport.Config{
     Issuer:        "myapp",
     Audience:      "myapp",
 }, userProvider)
+if err != nil {
+    log.Fatalf("failed to create passport: %v", err)
+}
 ```
 
 #### With Ent
@@ -82,10 +89,13 @@ import (
     _ "github.com/lib/pq"
 
     "github.com/mwangaben/auth/passport"
-    "github.com/yourorg/yourapp/ent"
+    "github.com/mwangaben/auth/storage/entstore/ent"
 )
 
-drv, _ := entsql.Open(dialect.Postgres, dsn)
+drv, err := entsql.Open(dialect.Postgres, dsn)
+if err != nil {
+    log.Fatalf("failed to open ent driver: %v", err)
+}
 client := ent.NewClient(ent.Driver(drv))
 defer client.Close()
 
@@ -94,8 +104,16 @@ p, err := passport.NewPassport(client, &passport.Config{
     RefreshExpiry: time.Hour * 24 * 7,
     Issuer:        "myapp",
     Audience:      "myapp",
+    // Optional: force a specific backend. Auto-detected otherwise.
+    // StorageDriver: "ent",
 }, userProvider)
+if err != nil {
+    log.Fatalf("failed to create passport: %v", err)
+}
 ```
+
+The Ent `client` is constructed from the schemas that ship with this package.
+You do **not** need to define your own Ent schema for the OAuth tables.
 
 ### 2. Implement `UserProvider`
 
@@ -104,7 +122,9 @@ Passport doesn't know about your user model. You provide four methods:
 ```go
 import (
     "context"
+
     "github.com/mwangaben/auth/passport"
+    "gorm.io/gorm"
 )
 
 type UserProvider struct {
@@ -179,8 +199,8 @@ userID := claims.UserID
 scopes := claims.Scopes
 ```
 
-Validation checks **both** the JWT signature and the database record (revocation,
-expiry). A token must pass both to be considered valid.
+Validation checks **both** the JWT signature and the database record
+(revocation, expiry). A token must pass both to be considered valid.
 
 ### 5. Refresh Tokens
 
@@ -188,8 +208,8 @@ expiry). A token must pass both to be considered valid.
 newToken, err := p.RefreshToken(ctx, refreshToken)
 ```
 
-Refresh is a **rotation**: the old refresh token is revoked, and a new access +
-refresh pair is issued. Reusing an old refresh token will fail.
+Refresh is a **rotation**: the old refresh token is revoked, and a new
+access + refresh pair is issued. Reusing an old refresh token will fail.
 
 ### 6. Revoke Tokens
 
@@ -227,10 +247,17 @@ Inside the handler:
 
 ```go
 func protectedHandler(w http.ResponseWriter, r *http.Request) {
-    user := middleware.GetUserFromContext(r.Context())      // interface{}
-    claims := middleware.GetTokenFromContext(r.Context())   // *jwt.Claims
+    user := middleware.GetUserFromContext(r.Context())       // interface{}
+    claims := middleware.GetTokenFromContext(r.Context())    // *authjwt.Claims
     // ...
 }
+```
+
+The claims type returned by `GetTokenFromContext` is
+`github.com/mwangaben/auth/jwt.Claims`. Import it as:
+
+```go
+import authjwt "github.com/mwangaben/auth/jwt"
 ```
 
 ## Configuration
@@ -257,6 +284,26 @@ type Config struct {
 }
 ```
 
+## Package Overview
+
+```
+auth/
+├── passport/       # Public API: NewPassport, IssueToken, ValidateToken, ...
+├── jwt/            # Leaf package: JWT signing, verification, Claims type
+├── storage/        # Backend-agnostic Repository interface
+│   ├── gormstore/  # GORM implementation
+│   └── entstore/   # Ent implementation
+│       ├── schema/ # Ent schemas
+│       └── ent/    # Generated Ent client (do not edit)
+├── middleware/     # net/http middleware
+├── models/         # GORM models (used by gormstore)
+└── errors/         # Shared error values
+```
+
+The `jwt` package is a **leaf** — it has no internal dependencies. The
+`passport` package orchestrates token policy; the `storage` layer only handles
+persistence.
+
 ## Testing
 
 The test suite exercises **both** backends against a real Postgres database:
@@ -267,10 +314,14 @@ go test ./... -race -count=1
 
 # Just the shared cross-backend conformance suite
 go test ./tests/... -run TestBackends -v
+
+# Focus on the Ent backend
+go test ./tests/... -run TestEnt -v
 ```
 
-Test databases are created and torn down by the helpers in `tests/test_utils.go`.
-Set `DB_*` environment variables to point at a different Postgres instance:
+Test databases are created and torn down by the helpers in
+`tests/test_utils.go`. Set `DB_*` environment variables to point at a
+different Postgres instance:
 
 ```bash
 export DB_HOST=localhost
@@ -293,6 +344,72 @@ passport ──► jwt
 
 `jwt` is a leaf package — it has no internal dependencies. `passport`
 orchestrates token policy; the storage layer only handles persistence.
+
+## Migration from v1.0
+
+`v1.1.0` introduces a storage abstraction that supports both GORM and Ent
+backends. The public API changed in a few mechanical ways. This section walks
+through the diffs.
+
+### 1. `NewPassport` accepts `interface{}`
+
+The first argument is now `interface{}` — pass `*gorm.DB` or `*ent.Client`.
+Auto-detection selects the backend. To force one:
+
+```go
+p, err := passport.NewPassport(db, &passport.Config{
+    StorageDriver: "ent", // or "gorm"
+}, userProvider)
+```
+
+### 2. `ValidateToken` takes a `context.Context`
+
+```go
+// old
+claims, err := p.ValidateToken(tokenString)
+
+// new
+claims, err := p.ValidateToken(ctx, tokenString)
+```
+
+Same for `RevokeToken`, `RevokeAllTokens`, `RefreshToken`, `CreateClient`,
+`GetClient`, `VerifyClientSecret`, and every other public method on
+`*Passport`.
+
+### 3. `passport.Manager` is now `passport.Passport`
+
+The type is still `*Passport`, but the constructor is `NewPassport`, not
+`NewManager`. If you had a type alias pointing at `Manager`, remove it.
+
+### 4. Storage backends share schema
+
+The GORM and Ent backends use the **same table names**. If you were running
+against GORM in v1.0 and want to switch to Ent:
+
+1. Stop the application.
+2. Update the `NewPassport` call to pass `*ent.Client`.
+3. Restart.
+
+No data migration needed. The Ent schema declares the same columns and
+indexes as the GORM models.
+
+### 5. `jwt` package is a leaf
+
+The `jwt` package no longer imports `passport` or `storage`. If you were
+relying on those imports for side effects (unlikely), remove the dependency.
+
+The `jwt.Claims` type is unchanged — the same struct with the same JSON
+tags. Existing JWTs continue to validate.
+
+### 6. Auto-migration behavior
+
+`NewPassport` now calls `AutoMigrate` on the selected backend during
+construction. If your database user lacks DDL privileges, either:
+
+- Grant them, or
+- Call `passport.NewPassport` against a database that already has the
+  tables (auto-migration is idempotent), or
+- Run the migrations out-of-band using the GORM or Ent migration tooling.
 
 ## License
 
