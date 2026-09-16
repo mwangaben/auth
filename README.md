@@ -7,7 +7,7 @@ A Laravel Passport-like authentication package for Go with JWT support.
 - ✅ OAuth2 server implementation
 - ✅ JWT token generation and validation (RS256)
 - ✅ Personal access tokens
-- ✅ Refresh tokens (with rotation)
+- ✅ Refresh tokens with rotation and **independent lifetimes**
 - ✅ Client management (bcrypt-hashed secrets)
 - ✅ Password grant flow
 - ✅ Token revocation
@@ -47,6 +47,25 @@ Both backends share the same SQL table names (`oauth_clients`,
 `oauth_access_tokens`, `oauth_personal_access_tokens`). A database created by
 one backend can be read by the other without migration.
 
+## Token Lifetimes
+
+Access and refresh tokens have **independent lifetimes**:
+
+| Token | Default | Purpose |
+|---|---|---|
+| Access | 15 minutes | Authenticates each request. Short-lived by design. |
+| Refresh | 7 days | Obtained at login, exchanged for new access tokens. Rotates on every use. |
+
+When an access token expires, the client calls `/refresh` with its refresh
+token to get a new pair. The old pair is revoked; the new pair is stored
+with fresh expiries. This continues for up to 7 days, after which the user
+must log in again.
+
+**Why separate lifetimes?** A refresh token that expired at the same moment
+as its access token would be useless. The whole point of a refresh token is
+to outlive the access token it issued. See the `Config` section below for
+tuning the defaults.
+
 ## Quick Start
 
 ### 1. Create a Passport instance
@@ -68,8 +87,8 @@ if err != nil {
 }
 
 p, err := passport.NewPassport(db, &passport.Config{
-    TokenExpiry:   time.Hour * 24,
-    RefreshExpiry: time.Hour * 24 * 7,
+    TokenExpiry:   15 * time.Minute,
+    RefreshExpiry: 7 * 24 * time.Hour,
     Issuer:        "myapp",
     Audience:      "myapp",
 }, userProvider)
@@ -100,12 +119,10 @@ client := ent.NewClient(ent.Driver(drv))
 defer client.Close()
 
 p, err := passport.NewPassport(client, &passport.Config{
-    TokenExpiry:   time.Hour * 24,
-    RefreshExpiry: time.Hour * 24 * 7,
+    TokenExpiry:   15 * time.Minute,
+    RefreshExpiry: 7 * 24 * time.Hour,
     Issuer:        "myapp",
     Audience:      "myapp",
-    // Optional: force a specific backend. Auto-detected otherwise.
-    // StorageDriver: "ent",
 }, userProvider)
 if err != nil {
     log.Fatalf("failed to create passport: %v", err)
@@ -183,7 +200,11 @@ type TokenResponse struct {
     AccessToken  string `json:"access_token"`
     RefreshToken string `json:"refresh_token,omitempty"`
     TokenType    string `json:"token_type"`
-    ExpiresIn    int64  `json:"expires_in"`
+
+    // ExpiresIn is the access token's TTL in seconds. Clients should treat
+    // it as "refresh after this many seconds". The refresh token's lifetime
+    // is not exposed because clients don't need it.
+    ExpiresIn int64 `json:"expires_in"`
 }
 ```
 
@@ -200,7 +221,12 @@ scopes := claims.Scopes
 ```
 
 Validation checks **both** the JWT signature and the database record
-(revocation, expiry). A token must pass both to be considered valid.
+(revocation, access-token expiry). A token must pass both to be considered
+valid.
+
+If the access token is expired but the refresh token is still valid,
+`ValidateToken` returns an error — the caller should then call `RefreshToken`.
+This is the expected pattern; it does not mean the user is logged out.
 
 ### 5. Refresh Tokens
 
@@ -209,7 +235,11 @@ newToken, err := p.RefreshToken(ctx, refreshToken)
 ```
 
 Refresh is a **rotation**: the old refresh token is revoked, and a new
-access + refresh pair is issued. Reusing an old refresh token will fail.
+access + refresh pair is issued with fresh expiries. Reusing an old refresh
+token will fail.
+
+Refreshing only checks the refresh token's expiry. It succeeds even if the
+current access token has already expired — that's the point.
 
 ### 6. Revoke Tokens
 
@@ -269,10 +299,17 @@ type Config struct {
     PrivateKey []byte
     PublicKey  []byte
 
-    // Lifetime of access tokens. Defaults to 24h.
+    // Lifetime of access tokens. Defaults to 15 minutes.
+    //
+    // Should be short — minutes to hours. If an access token leaks, the
+    // attacker can only use it until this expires. The refresh token exists
+    // precisely so that a short access token doesn't force frequent logins.
     TokenExpiry time.Duration
 
     // Lifetime of refresh tokens. Defaults to 7 days.
+    //
+    // Should be long — days to weeks. This is the effective session length:
+    // after this, the user must log in again.
     RefreshExpiry time.Duration
 
     // Standard JWT claims.
@@ -283,6 +320,45 @@ type Config struct {
     StorageDriver string
 }
 ```
+
+**`TokenExpiry` must be shorter than `RefreshExpiry`.** If you set them equal
+or inverted, the refresh flow cannot work as designed. A future version of
+the package may validate this at construction time; for now, it's your
+responsibility.
+
+## Background Cleanup
+
+Every refresh inserts a new row in `oauth_access_tokens` and revokes the old
+one (a flag change, not a delete). Without cleanup, the table grows
+unbounded.
+
+Wire a cleanup goroutine at application startup:
+
+```go
+go func() {
+    ticker := time.NewTicker(time.Hour)
+    defer ticker.Stop()
+    for range ticker.C {
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        n, err := p.CleanupExpiredTokens(ctx)
+        cancel()
+        if err != nil {
+            log.Printf("auth: token cleanup failed: %v", err)
+            continue
+        }
+        if n > 0 {
+            log.Printf("auth: deleted %d expired tokens", n)
+        }
+    }
+}()
+```
+
+`CleanupExpiredTokens` deletes rows whose **both** access and refresh windows
+have closed. Rows with a still-valid refresh token are kept — the user may
+still refresh.
+
+Hourly is a reasonable interval. Adjust to taste. The method is safe to call
+concurrently with normal traffic.
 
 ## Package Overview
 
@@ -317,6 +393,9 @@ go test ./tests/... -run TestBackends -v
 
 # Focus on the Ent backend
 go test ./tests/... -run TestEnt -v
+
+# The two-expiry regression test
+go test ./tests/... -run TestRefreshTokenOutlivesAccessToken -v
 ```
 
 Test databases are created and torn down by the helpers in
@@ -347,9 +426,9 @@ orchestrates token policy; the storage layer only handles persistence.
 
 ## Migration from v1.0
 
-`v1.1.0` introduces a storage abstraction that supports both GORM and Ent
-backends. The public API changed in a few mechanical ways. This section walks
-through the diffs.
+`v1.1.0` introduced a storage abstraction supporting GORM and Ent. `v1.1.1`
+fixed a bug in the token expiry model. Both change the public API in
+mechanical ways.
 
 ### 1. `NewPassport` accepts `interface{}`
 
@@ -410,6 +489,89 @@ construction. If your database user lacks DDL privileges, either:
 - Call `passport.NewPassport` against a database that already has the
   tables (auto-migration is idempotent), or
 - Run the migrations out-of-band using the GORM or Ent migration tooling.
+
+## Migration from v1.1.0
+
+`v1.1.1` splits the single `expires_at` column on `oauth_access_tokens` into
+`access_expires_at` and `refresh_expires_at`. The application code no longer
+has to know which of the two an "expiry" refers to; the storage layer exposes
+both explicitly.
+
+### 1. Schema change
+
+If you use `AutoMigrate` (the default), the new columns are created
+automatically on the next `NewPassport` call. If you manage migrations
+manually, apply:
+
+```sql
+-- Backfill from the old column.
+ALTER TABLE oauth_access_tokens
+    ADD COLUMN access_expires_at TIMESTAMP;
+UPDATE oauth_access_tokens SET access_expires_at = expires_at;
+ALTER TABLE oauth_access_tokens
+    ALTER COLUMN access_expires_at SET NOT NULL;
+
+ALTER TABLE oauth_access_tokens
+    ADD COLUMN refresh_expires_at TIMESTAMP;
+-- Best guess: old row's refresh window was the same as its access window.
+-- New code will use RefreshExpiry for refresh tokens issued after this point.
+UPDATE oauth_access_tokens SET refresh_expires_at = expires_at;
+ALTER TABLE oauth_access_tokens
+    ALTER COLUMN refresh_expires_at SET NOT NULL;
+
+ALTER TABLE oauth_access_tokens DROP COLUMN expires_at;
+
+CREATE INDEX idx_oauth_access_tokens_access_expires_at
+    ON oauth_access_tokens(access_expires_at);
+CREATE INDEX idx_oauth_access_tokens_refresh_expires_at
+    ON oauth_access_tokens(refresh_expires_at);
+```
+
+If your database is fresh (no production data), the simplest path is:
+
+```sql
+DROP TABLE oauth_access_tokens;
+```
+
+then let `AutoMigrate` recreate it with the correct schema.
+
+### 2. Field rename in `storage.Token` and `models.OAuthToken`
+
+```go
+// old
+tok.ExpiresAt
+tok.IsExpired()
+tok.IsValid()
+
+// new
+tok.AccessExpiresAt   // when validating an access token
+tok.RefreshExpiresAt  // when validating a refresh token
+tok.IsAccessTokenExpired()
+tok.IsRefreshTokenExpired()
+tok.IsAccessTokenValid()
+tok.IsRefreshTokenValid()
+```
+
+Choose based on what the caller is asking. In nearly every case:
+
+- **Validating a request's bearer token** → `AccessExpiresAt` / `IsAccessTokenExpired()`.
+- **Handling a refresh request** → `RefreshExpiresAt` / `IsRefreshTokenExpired()`.
+- **Cleanup** → both (the row is only dead when both windows have closed).
+
+### 3. New `Repository` method
+
+```go
+DeleteExpiredTokens(ctx context.Context, before time.Time) (int, error)
+```
+
+Both backends implement it. Consumers should call it from a scheduled job
+(see the "Background Cleanup" section above).
+
+### 4. Default `TokenExpiry` reduced
+
+Was `24 * time.Hour`, now `15 * time.Minute`. If you were relying on the
+old default, set `Config.TokenExpiry` explicitly. The shorter default is
+now safe because refresh tokens work correctly.
 
 ## License
 
