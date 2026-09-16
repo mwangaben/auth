@@ -27,14 +27,16 @@ const (
 	FieldAccessToken = "access_token"
 	// FieldRefreshToken holds the string denoting the refresh_token field in the database.
 	FieldRefreshToken = "refresh_token"
-	// FieldExpiresAt holds the string denoting the expires_at field in the database.
-	FieldExpiresAt = "expires_at"
+	// FieldAccessExpiresAt holds the string denoting the access_expires_at field in the database.
+	FieldAccessExpiresAt = "access_expires_at"
+	// FieldRefreshExpiresAt holds the string denoting the refresh_expires_at field in the database.
+	FieldRefreshExpiresAt = "refresh_expires_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the oauthtoken in the database.
-	Table = "oauth_tokens"
+	Table = "oauth_access_tokens"
 )
 
 // Columns holds all SQL columns for oauthtoken fields.
@@ -47,7 +49,8 @@ var Columns = []string{
 	FieldRevoked,
 	FieldAccessToken,
 	FieldRefreshToken,
-	FieldExpiresAt,
+	FieldAccessExpiresAt,
+	FieldRefreshExpiresAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -63,6 +66,12 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	UserIDValidator func(string) error
+	// ClientIDValidator is a validator for the "client_id" field. It is called by the builders before save.
+	ClientIDValidator func(string) error
+	// NameValidator is a validator for the "name" field. It is called by the builders before save.
+	NameValidator func(string) error
 	// DefaultRevoked holds the default value on creation for the "revoked" field.
 	DefaultRevoked bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -116,9 +125,14 @@ func ByRefreshToken(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRefreshToken, opts...).ToFunc()
 }
 
-// ByExpiresAt orders the results by the expires_at field.
-func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
+// ByAccessExpiresAt orders the results by the access_expires_at field.
+func ByAccessExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccessExpiresAt, opts...).ToFunc()
+}
+
+// ByRefreshExpiresAt orders the results by the refresh_expires_at field.
+func ByRefreshExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRefreshExpiresAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

@@ -57,16 +57,28 @@ func init() {
 	oauthpersonalaccesstoken.UpdateDefaultUpdatedAt = oauthpersonalaccesstokenDescUpdatedAt.UpdateDefault.(func() time.Time)
 	oauthtokenFields := schema.OAuthToken{}.Fields()
 	_ = oauthtokenFields
+	// oauthtokenDescUserID is the schema descriptor for user_id field.
+	oauthtokenDescUserID := oauthtokenFields[1].Descriptor()
+	// oauthtoken.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	oauthtoken.UserIDValidator = oauthtokenDescUserID.Validators[0].(func(string) error)
+	// oauthtokenDescClientID is the schema descriptor for client_id field.
+	oauthtokenDescClientID := oauthtokenFields[2].Descriptor()
+	// oauthtoken.ClientIDValidator is a validator for the "client_id" field. It is called by the builders before save.
+	oauthtoken.ClientIDValidator = oauthtokenDescClientID.Validators[0].(func(string) error)
+	// oauthtokenDescName is the schema descriptor for name field.
+	oauthtokenDescName := oauthtokenFields[3].Descriptor()
+	// oauthtoken.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	oauthtoken.NameValidator = oauthtokenDescName.Validators[0].(func(string) error)
 	// oauthtokenDescRevoked is the schema descriptor for revoked field.
 	oauthtokenDescRevoked := oauthtokenFields[5].Descriptor()
 	// oauthtoken.DefaultRevoked holds the default value on creation for the revoked field.
 	oauthtoken.DefaultRevoked = oauthtokenDescRevoked.Default.(bool)
 	// oauthtokenDescCreatedAt is the schema descriptor for created_at field.
-	oauthtokenDescCreatedAt := oauthtokenFields[9].Descriptor()
+	oauthtokenDescCreatedAt := oauthtokenFields[10].Descriptor()
 	// oauthtoken.DefaultCreatedAt holds the default value on creation for the created_at field.
 	oauthtoken.DefaultCreatedAt = oauthtokenDescCreatedAt.Default.(func() time.Time)
 	// oauthtokenDescUpdatedAt is the schema descriptor for updated_at field.
-	oauthtokenDescUpdatedAt := oauthtokenFields[10].Descriptor()
+	oauthtokenDescUpdatedAt := oauthtokenFields[11].Descriptor()
 	// oauthtoken.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	oauthtoken.DefaultUpdatedAt = oauthtokenDescUpdatedAt.Default.(func() time.Time)
 	// oauthtoken.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

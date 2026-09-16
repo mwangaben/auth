@@ -1422,23 +1422,24 @@ func (m *OAuthPersonalAccessTokenMutation) ResetEdge(name string) error {
 // OAuthTokenMutation represents an operation that mutates the OAuthToken nodes in the graph.
 type OAuthTokenMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	user_id       *string
-	client_id     *string
-	name          *string
-	scopes        *string
-	revoked       *bool
-	access_token  *string
-	refresh_token *string
-	expires_at    *time.Time
-	created_at    *time.Time
-	updated_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*OAuthToken, error)
-	predicates    []predicate.OAuthToken
+	op                 Op
+	typ                string
+	id                 *string
+	user_id            *string
+	client_id          *string
+	name               *string
+	scopes             *string
+	revoked            *bool
+	access_token       *string
+	refresh_token      *string
+	access_expires_at  *time.Time
+	refresh_expires_at *time.Time
+	created_at         *time.Time
+	updated_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*OAuthToken, error)
+	predicates         []predicate.OAuthToken
 }
 
 var _ ent.Mutation = (*OAuthTokenMutation)(nil)
@@ -1849,40 +1850,76 @@ func (m *OAuthTokenMutation) ResetRefreshToken() {
 	delete(m.clearedFields, oauthtoken.FieldRefreshToken)
 }
 
-// SetExpiresAt sets the "expires_at" field.
-func (m *OAuthTokenMutation) SetExpiresAt(t time.Time) {
-	m.expires_at = &t
+// SetAccessExpiresAt sets the "access_expires_at" field.
+func (m *OAuthTokenMutation) SetAccessExpiresAt(t time.Time) {
+	m.access_expires_at = &t
 }
 
-// ExpiresAt returns the value of the "expires_at" field in the mutation.
-func (m *OAuthTokenMutation) ExpiresAt() (r time.Time, exists bool) {
-	v := m.expires_at
+// AccessExpiresAt returns the value of the "access_expires_at" field in the mutation.
+func (m *OAuthTokenMutation) AccessExpiresAt() (r time.Time, exists bool) {
+	v := m.access_expires_at
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldExpiresAt returns the old "expires_at" field's value of the OAuthToken entity.
+// OldAccessExpiresAt returns the old "access_expires_at" field's value of the OAuthToken entity.
 // If the OAuthToken object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OAuthTokenMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+func (m *OAuthTokenMutation) OldAccessExpiresAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+		return v, errors.New("OldAccessExpiresAt is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+		return v, errors.New("OldAccessExpiresAt requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+		return v, fmt.Errorf("querying old value for OldAccessExpiresAt: %w", err)
 	}
-	return oldValue.ExpiresAt, nil
+	return oldValue.AccessExpiresAt, nil
 }
 
-// ResetExpiresAt resets all changes to the "expires_at" field.
-func (m *OAuthTokenMutation) ResetExpiresAt() {
-	m.expires_at = nil
+// ResetAccessExpiresAt resets all changes to the "access_expires_at" field.
+func (m *OAuthTokenMutation) ResetAccessExpiresAt() {
+	m.access_expires_at = nil
+}
+
+// SetRefreshExpiresAt sets the "refresh_expires_at" field.
+func (m *OAuthTokenMutation) SetRefreshExpiresAt(t time.Time) {
+	m.refresh_expires_at = &t
+}
+
+// RefreshExpiresAt returns the value of the "refresh_expires_at" field in the mutation.
+func (m *OAuthTokenMutation) RefreshExpiresAt() (r time.Time, exists bool) {
+	v := m.refresh_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRefreshExpiresAt returns the old "refresh_expires_at" field's value of the OAuthToken entity.
+// If the OAuthToken object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *OAuthTokenMutation) OldRefreshExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRefreshExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRefreshExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRefreshExpiresAt: %w", err)
+	}
+	return oldValue.RefreshExpiresAt, nil
+}
+
+// ResetRefreshExpiresAt resets all changes to the "refresh_expires_at" field.
+func (m *OAuthTokenMutation) ResetRefreshExpiresAt() {
+	m.refresh_expires_at = nil
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -1991,7 +2028,7 @@ func (m *OAuthTokenMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *OAuthTokenMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.user_id != nil {
 		fields = append(fields, oauthtoken.FieldUserID)
 	}
@@ -2013,8 +2050,11 @@ func (m *OAuthTokenMutation) Fields() []string {
 	if m.refresh_token != nil {
 		fields = append(fields, oauthtoken.FieldRefreshToken)
 	}
-	if m.expires_at != nil {
-		fields = append(fields, oauthtoken.FieldExpiresAt)
+	if m.access_expires_at != nil {
+		fields = append(fields, oauthtoken.FieldAccessExpiresAt)
+	}
+	if m.refresh_expires_at != nil {
+		fields = append(fields, oauthtoken.FieldRefreshExpiresAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, oauthtoken.FieldCreatedAt)
@@ -2044,8 +2084,10 @@ func (m *OAuthTokenMutation) Field(name string) (ent.Value, bool) {
 		return m.AccessToken()
 	case oauthtoken.FieldRefreshToken:
 		return m.RefreshToken()
-	case oauthtoken.FieldExpiresAt:
-		return m.ExpiresAt()
+	case oauthtoken.FieldAccessExpiresAt:
+		return m.AccessExpiresAt()
+	case oauthtoken.FieldRefreshExpiresAt:
+		return m.RefreshExpiresAt()
 	case oauthtoken.FieldCreatedAt:
 		return m.CreatedAt()
 	case oauthtoken.FieldUpdatedAt:
@@ -2073,8 +2115,10 @@ func (m *OAuthTokenMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldAccessToken(ctx)
 	case oauthtoken.FieldRefreshToken:
 		return m.OldRefreshToken(ctx)
-	case oauthtoken.FieldExpiresAt:
-		return m.OldExpiresAt(ctx)
+	case oauthtoken.FieldAccessExpiresAt:
+		return m.OldAccessExpiresAt(ctx)
+	case oauthtoken.FieldRefreshExpiresAt:
+		return m.OldRefreshExpiresAt(ctx)
 	case oauthtoken.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case oauthtoken.FieldUpdatedAt:
@@ -2137,12 +2181,19 @@ func (m *OAuthTokenMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRefreshToken(v)
 		return nil
-	case oauthtoken.FieldExpiresAt:
+	case oauthtoken.FieldAccessExpiresAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetExpiresAt(v)
+		m.SetAccessExpiresAt(v)
+		return nil
+	case oauthtoken.FieldRefreshExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRefreshExpiresAt(v)
 		return nil
 	case oauthtoken.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -2255,8 +2306,11 @@ func (m *OAuthTokenMutation) ResetField(name string) error {
 	case oauthtoken.FieldRefreshToken:
 		m.ResetRefreshToken()
 		return nil
-	case oauthtoken.FieldExpiresAt:
-		m.ResetExpiresAt()
+	case oauthtoken.FieldAccessExpiresAt:
+		m.ResetAccessExpiresAt()
+		return nil
+	case oauthtoken.FieldRefreshExpiresAt:
+		m.ResetRefreshExpiresAt()
 		return nil
 	case oauthtoken.FieldCreatedAt:
 		m.ResetCreatedAt()

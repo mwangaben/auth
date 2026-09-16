@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -55,35 +56,46 @@ var (
 			},
 		},
 	}
-	// OauthTokensColumns holds the columns for the "oauth_tokens" table.
-	OauthTokensColumns = []*schema.Column{
+	// OauthAccessTokensColumns holds the columns for the "oauth_access_tokens" table.
+	OauthAccessTokensColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
-		{Name: "user_id", Type: field.TypeString},
-		{Name: "client_id", Type: field.TypeString, Nullable: true},
-		{Name: "name", Type: field.TypeString, Nullable: true},
+		{Name: "user_id", Type: field.TypeString, Size: 255},
+		{Name: "client_id", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "name", Type: field.TypeString, Nullable: true, Size: 255},
 		{Name: "scopes", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "revoked", Type: field.TypeBool, Default: false},
 		{Name: "access_token", Type: field.TypeString, Size: 2147483647},
 		{Name: "refresh_token", Type: field.TypeString, Nullable: true, Size: 2147483647},
-		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "access_expires_at", Type: field.TypeTime},
+		{Name: "refresh_expires_at", Type: field.TypeTime},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
-	// OauthTokensTable holds the schema information for the "oauth_tokens" table.
-	OauthTokensTable = &schema.Table{
-		Name:       "oauth_tokens",
-		Columns:    OauthTokensColumns,
-		PrimaryKey: []*schema.Column{OauthTokensColumns[0]},
+	// OauthAccessTokensTable holds the schema information for the "oauth_access_tokens" table.
+	OauthAccessTokensTable = &schema.Table{
+		Name:       "oauth_access_tokens",
+		Columns:    OauthAccessTokensColumns,
+		PrimaryKey: []*schema.Column{OauthAccessTokensColumns[0]},
 		Indexes: []*schema.Index{
 			{
 				Name:    "oauthtoken_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{OauthTokensColumns[1]},
+				Columns: []*schema.Column{OauthAccessTokensColumns[1]},
 			},
 			{
 				Name:    "oauthtoken_client_id",
 				Unique:  false,
-				Columns: []*schema.Column{OauthTokensColumns[2]},
+				Columns: []*schema.Column{OauthAccessTokensColumns[2]},
+			},
+			{
+				Name:    "oauthtoken_access_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{OauthAccessTokensColumns[8]},
+			},
+			{
+				Name:    "oauthtoken_refresh_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{OauthAccessTokensColumns[9]},
 			},
 		},
 	}
@@ -91,9 +103,12 @@ var (
 	Tables = []*schema.Table{
 		OauthClientsTable,
 		OauthPersonalAccessTokensTable,
-		OauthTokensTable,
+		OauthAccessTokensTable,
 	}
 )
 
 func init() {
+	OauthAccessTokensTable.Annotation = &entsql.Annotation{
+		Table: "oauth_access_tokens",
+	}
 }

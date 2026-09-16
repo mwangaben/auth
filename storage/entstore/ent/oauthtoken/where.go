@@ -99,9 +99,14 @@ func RefreshToken(v string) predicate.OAuthToken {
 	return predicate.OAuthToken(sql.FieldEQ(FieldRefreshToken, v))
 }
 
-// ExpiresAt applies equality check predicate on the "expires_at" field. It's identical to ExpiresAtEQ.
-func ExpiresAt(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldEQ(FieldExpiresAt, v))
+// AccessExpiresAt applies equality check predicate on the "access_expires_at" field. It's identical to AccessExpiresAtEQ.
+func AccessExpiresAt(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldEQ(FieldAccessExpiresAt, v))
+}
+
+// RefreshExpiresAt applies equality check predicate on the "refresh_expires_at" field. It's identical to RefreshExpiresAtEQ.
+func RefreshExpiresAt(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldEQ(FieldRefreshExpiresAt, v))
 }
 
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
@@ -554,44 +559,84 @@ func RefreshTokenContainsFold(v string) predicate.OAuthToken {
 	return predicate.OAuthToken(sql.FieldContainsFold(FieldRefreshToken, v))
 }
 
-// ExpiresAtEQ applies the EQ predicate on the "expires_at" field.
-func ExpiresAtEQ(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldEQ(FieldExpiresAt, v))
+// AccessExpiresAtEQ applies the EQ predicate on the "access_expires_at" field.
+func AccessExpiresAtEQ(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldEQ(FieldAccessExpiresAt, v))
 }
 
-// ExpiresAtNEQ applies the NEQ predicate on the "expires_at" field.
-func ExpiresAtNEQ(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldNEQ(FieldExpiresAt, v))
+// AccessExpiresAtNEQ applies the NEQ predicate on the "access_expires_at" field.
+func AccessExpiresAtNEQ(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldNEQ(FieldAccessExpiresAt, v))
 }
 
-// ExpiresAtIn applies the In predicate on the "expires_at" field.
-func ExpiresAtIn(vs ...time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldIn(FieldExpiresAt, vs...))
+// AccessExpiresAtIn applies the In predicate on the "access_expires_at" field.
+func AccessExpiresAtIn(vs ...time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldIn(FieldAccessExpiresAt, vs...))
 }
 
-// ExpiresAtNotIn applies the NotIn predicate on the "expires_at" field.
-func ExpiresAtNotIn(vs ...time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldNotIn(FieldExpiresAt, vs...))
+// AccessExpiresAtNotIn applies the NotIn predicate on the "access_expires_at" field.
+func AccessExpiresAtNotIn(vs ...time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldNotIn(FieldAccessExpiresAt, vs...))
 }
 
-// ExpiresAtGT applies the GT predicate on the "expires_at" field.
-func ExpiresAtGT(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldGT(FieldExpiresAt, v))
+// AccessExpiresAtGT applies the GT predicate on the "access_expires_at" field.
+func AccessExpiresAtGT(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldGT(FieldAccessExpiresAt, v))
 }
 
-// ExpiresAtGTE applies the GTE predicate on the "expires_at" field.
-func ExpiresAtGTE(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldGTE(FieldExpiresAt, v))
+// AccessExpiresAtGTE applies the GTE predicate on the "access_expires_at" field.
+func AccessExpiresAtGTE(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldGTE(FieldAccessExpiresAt, v))
 }
 
-// ExpiresAtLT applies the LT predicate on the "expires_at" field.
-func ExpiresAtLT(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldLT(FieldExpiresAt, v))
+// AccessExpiresAtLT applies the LT predicate on the "access_expires_at" field.
+func AccessExpiresAtLT(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldLT(FieldAccessExpiresAt, v))
 }
 
-// ExpiresAtLTE applies the LTE predicate on the "expires_at" field.
-func ExpiresAtLTE(v time.Time) predicate.OAuthToken {
-	return predicate.OAuthToken(sql.FieldLTE(FieldExpiresAt, v))
+// AccessExpiresAtLTE applies the LTE predicate on the "access_expires_at" field.
+func AccessExpiresAtLTE(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldLTE(FieldAccessExpiresAt, v))
+}
+
+// RefreshExpiresAtEQ applies the EQ predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtEQ(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldEQ(FieldRefreshExpiresAt, v))
+}
+
+// RefreshExpiresAtNEQ applies the NEQ predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtNEQ(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldNEQ(FieldRefreshExpiresAt, v))
+}
+
+// RefreshExpiresAtIn applies the In predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtIn(vs ...time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldIn(FieldRefreshExpiresAt, vs...))
+}
+
+// RefreshExpiresAtNotIn applies the NotIn predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtNotIn(vs ...time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldNotIn(FieldRefreshExpiresAt, vs...))
+}
+
+// RefreshExpiresAtGT applies the GT predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtGT(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldGT(FieldRefreshExpiresAt, v))
+}
+
+// RefreshExpiresAtGTE applies the GTE predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtGTE(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldGTE(FieldRefreshExpiresAt, v))
+}
+
+// RefreshExpiresAtLT applies the LT predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtLT(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldLT(FieldRefreshExpiresAt, v))
+}
+
+// RefreshExpiresAtLTE applies the LTE predicate on the "refresh_expires_at" field.
+func RefreshExpiresAtLTE(v time.Time) predicate.OAuthToken {
+	return predicate.OAuthToken(sql.FieldLTE(FieldRefreshExpiresAt, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

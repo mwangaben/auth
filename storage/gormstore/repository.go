@@ -8,6 +8,7 @@ import (
 	"github.com/mwangaben/auth/storage"
 	"gorm.io/gorm"
 	"strings"
+	"time"
 )
 
 // GormModels — keep the existing models but move them here or keep in models/
@@ -112,6 +113,17 @@ func (r *Repository) CreatePersonalAccessToken(ctx context.Context, pat *storage
 	return r.db.WithContext(ctx).Create(toGormPAT(pat)).Error
 }
 
+func (r *Repository) DeleteExpiredTokens(ctx context.Context, before time.Time) (int, error) {
+	result := r.db.WithContext(ctx).
+		Unscoped().
+		Where("access_expires_at < ? AND refresh_expires_at < ?", before, before).
+		Delete(&models.OAuthToken{})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return int(result.RowsAffected), nil
+}
+
 // ---- Mappers ----
 
 func toGormClient(c *storage.Client) *models.OAuthClient {
@@ -138,20 +150,35 @@ func fromGormClient(m *models.OAuthClient) *storage.Client {
 
 func toGormToken(t *storage.Token) *models.OAuthToken {
 	return &models.OAuthToken{
-		ID: t.ID, UserID: t.UserID, ClientID: t.ClientID,
-		Name: t.Name, Scopes: t.Scopes, Revoked: t.Revoked,
-		AccessToken: t.AccessToken, RefreshToken: t.RefreshToken,
-		ExpiresAt: t.ExpiresAt,
+		ID:           t.ID,
+		UserID:       t.UserID,
+		ClientID:     t.ClientID,
+		Name:         t.Name,
+		Scopes:       t.Scopes,
+		Revoked:      t.Revoked,
+		AccessToken:  t.AccessToken,
+		RefreshToken: t.RefreshToken,
+		// NEW
+		AccessExpiresAt:  t.AccessExpiresAt,
+		RefreshExpiresAt: t.RefreshExpiresAt,
 	}
 }
 
 func fromGormToken(m *models.OAuthToken) *storage.Token {
 	return &storage.Token{
-		ID: m.ID, UserID: m.UserID, ClientID: m.ClientID,
-		Name: m.Name, Scopes: m.Scopes, Revoked: m.Revoked,
-		AccessToken: m.AccessToken, RefreshToken: m.RefreshToken,
-		ExpiresAt: m.ExpiresAt,
-		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		ID:           m.ID,
+		UserID:       m.UserID,
+		ClientID:     m.ClientID,
+		Name:         m.Name,
+		Scopes:       m.Scopes,
+		Revoked:      m.Revoked,
+		AccessToken:  m.AccessToken,
+		RefreshToken: m.RefreshToken,
+		// NEW
+		AccessExpiresAt:  m.AccessExpiresAt,
+		RefreshExpiresAt: m.RefreshExpiresAt,
+		CreatedAt:        m.CreatedAt,
+		UpdatedAt:        m.UpdatedAt,
 	}
 }
 

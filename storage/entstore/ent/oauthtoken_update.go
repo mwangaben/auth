@@ -150,16 +150,30 @@ func (_u *OAuthTokenUpdate) ClearRefreshToken() *OAuthTokenUpdate {
 	return _u
 }
 
-// SetExpiresAt sets the "expires_at" field.
-func (_u *OAuthTokenUpdate) SetExpiresAt(v time.Time) *OAuthTokenUpdate {
-	_u.mutation.SetExpiresAt(v)
+// SetAccessExpiresAt sets the "access_expires_at" field.
+func (_u *OAuthTokenUpdate) SetAccessExpiresAt(v time.Time) *OAuthTokenUpdate {
+	_u.mutation.SetAccessExpiresAt(v)
 	return _u
 }
 
-// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
-func (_u *OAuthTokenUpdate) SetNillableExpiresAt(v *time.Time) *OAuthTokenUpdate {
+// SetNillableAccessExpiresAt sets the "access_expires_at" field if the given value is not nil.
+func (_u *OAuthTokenUpdate) SetNillableAccessExpiresAt(v *time.Time) *OAuthTokenUpdate {
 	if v != nil {
-		_u.SetExpiresAt(*v)
+		_u.SetAccessExpiresAt(*v)
+	}
+	return _u
+}
+
+// SetRefreshExpiresAt sets the "refresh_expires_at" field.
+func (_u *OAuthTokenUpdate) SetRefreshExpiresAt(v time.Time) *OAuthTokenUpdate {
+	_u.mutation.SetRefreshExpiresAt(v)
+	return _u
+}
+
+// SetNillableRefreshExpiresAt sets the "refresh_expires_at" field if the given value is not nil.
+func (_u *OAuthTokenUpdate) SetNillableRefreshExpiresAt(v *time.Time) *OAuthTokenUpdate {
+	if v != nil {
+		_u.SetRefreshExpiresAt(*v)
 	}
 	return _u
 }
@@ -211,7 +225,30 @@ func (_u *OAuthTokenUpdate) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *OAuthTokenUpdate) check() error {
+	if v, ok := _u.mutation.UserID(); ok {
+		if err := oauthtoken.UserIDValidator(v); err != nil {
+			return &ValidationError{Name: "user_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.user_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientID(); ok {
+		if err := oauthtoken.ClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "client_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.client_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Name(); ok {
+		if err := oauthtoken.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.name": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *OAuthTokenUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(oauthtoken.Table, oauthtoken.Columns, sqlgraph.NewFieldSpec(oauthtoken.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -253,8 +290,11 @@ func (_u *OAuthTokenUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if _u.mutation.RefreshTokenCleared() {
 		_spec.ClearField(oauthtoken.FieldRefreshToken, field.TypeString)
 	}
-	if value, ok := _u.mutation.ExpiresAt(); ok {
-		_spec.SetField(oauthtoken.FieldExpiresAt, field.TypeTime, value)
+	if value, ok := _u.mutation.AccessExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldAccessExpiresAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.RefreshExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldRefreshExpiresAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(oauthtoken.FieldUpdatedAt, field.TypeTime, value)
@@ -401,16 +441,30 @@ func (_u *OAuthTokenUpdateOne) ClearRefreshToken() *OAuthTokenUpdateOne {
 	return _u
 }
 
-// SetExpiresAt sets the "expires_at" field.
-func (_u *OAuthTokenUpdateOne) SetExpiresAt(v time.Time) *OAuthTokenUpdateOne {
-	_u.mutation.SetExpiresAt(v)
+// SetAccessExpiresAt sets the "access_expires_at" field.
+func (_u *OAuthTokenUpdateOne) SetAccessExpiresAt(v time.Time) *OAuthTokenUpdateOne {
+	_u.mutation.SetAccessExpiresAt(v)
 	return _u
 }
 
-// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
-func (_u *OAuthTokenUpdateOne) SetNillableExpiresAt(v *time.Time) *OAuthTokenUpdateOne {
+// SetNillableAccessExpiresAt sets the "access_expires_at" field if the given value is not nil.
+func (_u *OAuthTokenUpdateOne) SetNillableAccessExpiresAt(v *time.Time) *OAuthTokenUpdateOne {
 	if v != nil {
-		_u.SetExpiresAt(*v)
+		_u.SetAccessExpiresAt(*v)
+	}
+	return _u
+}
+
+// SetRefreshExpiresAt sets the "refresh_expires_at" field.
+func (_u *OAuthTokenUpdateOne) SetRefreshExpiresAt(v time.Time) *OAuthTokenUpdateOne {
+	_u.mutation.SetRefreshExpiresAt(v)
+	return _u
+}
+
+// SetNillableRefreshExpiresAt sets the "refresh_expires_at" field if the given value is not nil.
+func (_u *OAuthTokenUpdateOne) SetNillableRefreshExpiresAt(v *time.Time) *OAuthTokenUpdateOne {
+	if v != nil {
+		_u.SetRefreshExpiresAt(*v)
 	}
 	return _u
 }
@@ -475,7 +529,30 @@ func (_u *OAuthTokenUpdateOne) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *OAuthTokenUpdateOne) check() error {
+	if v, ok := _u.mutation.UserID(); ok {
+		if err := oauthtoken.UserIDValidator(v); err != nil {
+			return &ValidationError{Name: "user_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.user_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ClientID(); ok {
+		if err := oauthtoken.ClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "client_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.client_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Name(); ok {
+		if err := oauthtoken.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.name": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *OAuthTokenUpdateOne) sqlSave(ctx context.Context) (_node *OAuthToken, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(oauthtoken.Table, oauthtoken.Columns, sqlgraph.NewFieldSpec(oauthtoken.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -534,8 +611,11 @@ func (_u *OAuthTokenUpdateOne) sqlSave(ctx context.Context) (_node *OAuthToken, 
 	if _u.mutation.RefreshTokenCleared() {
 		_spec.ClearField(oauthtoken.FieldRefreshToken, field.TypeString)
 	}
-	if value, ok := _u.mutation.ExpiresAt(); ok {
-		_spec.SetField(oauthtoken.FieldExpiresAt, field.TypeTime, value)
+	if value, ok := _u.mutation.AccessExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldAccessExpiresAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.RefreshExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldRefreshExpiresAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(oauthtoken.FieldUpdatedAt, field.TypeTime, value)

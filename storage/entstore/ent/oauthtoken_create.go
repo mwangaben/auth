@@ -102,9 +102,15 @@ func (_c *OAuthTokenCreate) SetNillableRefreshToken(v *string) *OAuthTokenCreate
 	return _c
 }
 
-// SetExpiresAt sets the "expires_at" field.
-func (_c *OAuthTokenCreate) SetExpiresAt(v time.Time) *OAuthTokenCreate {
-	_c.mutation.SetExpiresAt(v)
+// SetAccessExpiresAt sets the "access_expires_at" field.
+func (_c *OAuthTokenCreate) SetAccessExpiresAt(v time.Time) *OAuthTokenCreate {
+	_c.mutation.SetAccessExpiresAt(v)
+	return _c
+}
+
+// SetRefreshExpiresAt sets the "refresh_expires_at" field.
+func (_c *OAuthTokenCreate) SetRefreshExpiresAt(v time.Time) *OAuthTokenCreate {
+	_c.mutation.SetRefreshExpiresAt(v)
 	return _c
 }
 
@@ -196,14 +202,32 @@ func (_c *OAuthTokenCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "OAuthToken.user_id"`)}
 	}
+	if v, ok := _c.mutation.UserID(); ok {
+		if err := oauthtoken.UserIDValidator(v); err != nil {
+			return &ValidationError{Name: "user_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.user_id": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ClientID(); ok {
+		if err := oauthtoken.ClientIDValidator(v); err != nil {
+			return &ValidationError{Name: "client_id", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.client_id": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.Name(); ok {
+		if err := oauthtoken.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "OAuthToken.name": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Revoked(); !ok {
 		return &ValidationError{Name: "revoked", err: errors.New(`ent: missing required field "OAuthToken.revoked"`)}
 	}
 	if _, ok := _c.mutation.AccessToken(); !ok {
 		return &ValidationError{Name: "access_token", err: errors.New(`ent: missing required field "OAuthToken.access_token"`)}
 	}
-	if _, ok := _c.mutation.ExpiresAt(); !ok {
-		return &ValidationError{Name: "expires_at", err: errors.New(`ent: missing required field "OAuthToken.expires_at"`)}
+	if _, ok := _c.mutation.AccessExpiresAt(); !ok {
+		return &ValidationError{Name: "access_expires_at", err: errors.New(`ent: missing required field "OAuthToken.access_expires_at"`)}
+	}
+	if _, ok := _c.mutation.RefreshExpiresAt(); !ok {
+		return &ValidationError{Name: "refresh_expires_at", err: errors.New(`ent: missing required field "OAuthToken.refresh_expires_at"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "OAuthToken.created_at"`)}
@@ -274,9 +298,13 @@ func (_c *OAuthTokenCreate) createSpec() (*OAuthToken, *sqlgraph.CreateSpec) {
 		_spec.SetField(oauthtoken.FieldRefreshToken, field.TypeString, value)
 		_node.RefreshToken = value
 	}
-	if value, ok := _c.mutation.ExpiresAt(); ok {
-		_spec.SetField(oauthtoken.FieldExpiresAt, field.TypeTime, value)
-		_node.ExpiresAt = value
+	if value, ok := _c.mutation.AccessExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldAccessExpiresAt, field.TypeTime, value)
+		_node.AccessExpiresAt = value
+	}
+	if value, ok := _c.mutation.RefreshExpiresAt(); ok {
+		_spec.SetField(oauthtoken.FieldRefreshExpiresAt, field.TypeTime, value)
+		_node.RefreshExpiresAt = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(oauthtoken.FieldCreatedAt, field.TypeTime, value)

@@ -3,6 +3,7 @@ package entstore
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/mwangaben/auth/storage"
 	"github.com/mwangaben/auth/storage/entstore/ent"
@@ -73,29 +74,6 @@ func (r *Repository) RevokeClient(ctx context.Context, id string) error {
 // Tokens
 // ---------------------------------------------------------------------------
 
-func (r *Repository) CreateToken(ctx context.Context, t *storage.Token) error {
-	b := r.client.OAuthToken.Create().
-		SetID(t.ID).
-		SetUserID(t.UserID).
-		SetRevoked(t.Revoked).
-		SetAccessToken(t.AccessToken).
-		SetRefreshToken(t.RefreshToken).
-		SetExpiresAt(t.ExpiresAt)
-
-	if t.ClientID != "" {
-		b = b.SetClientID(t.ClientID)
-	}
-	if t.Name != "" {
-		b = b.SetName(t.Name)
-	}
-	if t.Scopes != "" {
-		b = b.SetScopes(t.Scopes)
-	}
-
-	_, err := b.Save(ctx)
-	return err
-}
-
 func (r *Repository) GetTokenByAccessToken(ctx context.Context, at string) (*storage.Token, error) {
 	m, err := r.client.OAuthToken.Query().
 		Where(oauthtoken.AccessToken(at), oauthtoken.Revoked(false)).
@@ -132,15 +110,6 @@ func (r *Repository) RevokeAllUserTokens(ctx context.Context, userID string) err
 		SetRevoked(true).
 		Save(ctx)
 	return err
-}
-
-func (r *Repository) UpdateToken(ctx context.Context, t *storage.Token) error {
-	return r.client.OAuthToken.UpdateOneID(t.ID).
-		SetRevoked(t.Revoked).
-		SetExpiresAt(t.ExpiresAt).
-		SetAccessToken(t.AccessToken).
-		SetRefreshToken(t.RefreshToken).
-		Exec(ctx)
 }
 
 // ---------------------------------------------------------------------------
@@ -187,9 +156,13 @@ func fromEntToken(m *ent.OAuthToken) *storage.Token {
 		Revoked:      m.Revoked,
 		AccessToken:  m.AccessToken,
 		RefreshToken: m.RefreshToken,
-		ExpiresAt:    m.ExpiresAt,
-		CreatedAt:    m.CreatedAt,
-		UpdatedAt:    m.UpdatedAt,
+
+		// NEW
+		AccessExpiresAt:  m.AccessExpiresAt,
+		RefreshExpiresAt: m.RefreshExpiresAt,
+
+		CreatedAt: m.CreatedAt,
+		UpdatedAt: m.UpdatedAt,
 	}
 }
 
@@ -205,6 +178,53 @@ func (r *Repository) ListUserTokens(ctx context.Context, userID string) ([]*stor
 		out = append(out, fromEntToken(row))
 	}
 	return out, nil
+}
+
+func (r *Repository) CreateToken(ctx context.Context, t *storage.Token) error {
+	b := r.client.OAuthToken.Create().
+		SetID(t.ID).
+		SetUserID(t.UserID).
+		SetRevoked(t.Revoked).
+		SetAccessToken(t.AccessToken).
+		SetRefreshToken(t.RefreshToken).
+		SetAccessExpiresAt(t.AccessExpiresAt).  // NEW
+		SetRefreshExpiresAt(t.RefreshExpiresAt) // NEW
+
+	if t.ClientID != "" {
+		b = b.SetClientID(t.ClientID)
+	}
+	if t.Name != "" {
+		b = b.SetName(t.Name)
+	}
+	if t.Scopes != "" {
+		b = b.SetScopes(t.Scopes)
+	}
+
+	_, err := b.Save(ctx)
+	return err
+}
+
+func (r *Repository) UpdateToken(ctx context.Context, t *storage.Token) error {
+	return r.client.OAuthToken.UpdateOneID(t.ID).
+		SetRevoked(t.Revoked).
+		SetAccessExpiresAt(t.AccessExpiresAt).   // NEW
+		SetRefreshExpiresAt(t.RefreshExpiresAt). // NEW
+		SetAccessToken(t.AccessToken).
+		SetRefreshToken(t.RefreshToken).
+		Exec(ctx)
+}
+
+func (r *Repository) DeleteExpiredTokens(ctx context.Context, before time.Time) (int, error) {
+	n, err := r.client.OAuthToken.Delete().
+		Where(
+			oauthtoken.AccessExpiresAtLT(before),
+			oauthtoken.RefreshExpiresAtLT(before),
+		).
+		Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // compile-time assertion that Repository satisfies the storage interface

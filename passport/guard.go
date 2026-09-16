@@ -3,9 +3,8 @@ package passport
 import (
 	"context"
 	"errors"
-	"strings"
-
 	"github.com/mwangaben/auth/jwt"
+	"strings"
 )
 
 // Guard handles authentication helpers around Passport.
@@ -58,11 +57,9 @@ func (g *Guard) Validate(ctx context.Context, tokenString string) (interface{}, 
 	if err != nil {
 		return nil, errors.New("token not found or revoked")
 	}
-	if tok.IsExpired() {
+	if tok.IsAccessTokenExpired() { // ← line 61
 		return nil, errors.New("token has expired")
 	}
-
-	_ = claims // retained for future use (e.g., scope checks)
 
 	return g.passport.userProvider.FindByID(ctx, claims.UserID)
 }

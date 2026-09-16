@@ -143,7 +143,7 @@ func TestPassport(t *testing.T) {
 			// after revocation GetTokenByAccessToken returns "not found or revoked"
 			t.Logf("Token no longer returned by GetTokenByAccessToken (expected after revoke): %v", err)
 		} else {
-			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.ExpiresAt)
+			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.RefreshExpiresAt)
 		}
 	})
 
@@ -189,7 +189,7 @@ func TestPassport(t *testing.T) {
 			// after revocation GetTokenByAccessToken returns "not found or revoked"
 			t.Logf("Token no longer returned by GetTokenByAccessToken (expected after revoke): %v", err)
 		} else {
-			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.ExpiresAt)
+			t.Logf("Token in DB: Revoked=%v, ExpiresAt=%v", tok.Revoked, tok.RefreshExpiresAt)
 		}
 	})
 }
@@ -305,7 +305,8 @@ func TestRevocationFlow(t *testing.T) {
 	err = db.Where("access_token = ?", tokenResponse.AccessToken).First(&token).Error
 	require.NoError(t, err, "row should still exist after revocation")
 	assert.True(t, token.Revoked, "row should be flagged as revoked")
-	assert.True(t, token.ExpiresAt.After(time.Now()), "expiry should be untouched by revocation")
+	assert.True(t, token.AccessExpiresAt.After(time.Now()), "access expiry should be untouched by revocation")
+	assert.True(t, token.RefreshExpiresAt.After(time.Now()), "refresh expiry should be untouched by revocation")
 }
 
 func TestRefreshRotation(t *testing.T) {
@@ -363,4 +364,44 @@ func TestRefreshRotation(t *testing.T) {
 	} else {
 		t.Log("✅ Refresh token is different (good!)")
 	}
+}
+
+func TestRefreshTokenOutlivesAccessToken(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(db)
+
+	userProvider := &TestUserProvider{db: db}
+	user, err := CreateTestUser(db, "refresh-window@example.com", "password123", "Refresh User")
+	require.NoError(t, err)
+
+	p, err := passport.NewPassport(db, &passport.Config{
+		TokenExpiry:   1 * time.Second, // very short access token
+		RefreshExpiry: 1 * time.Hour,   // long refresh window
+		Issuer:        "test",
+		Audience:      "test",
+	}, userProvider)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	resp, err := p.IssueToken(ctx, user.ID, "test-client", []string{"read"})
+	require.NoError(t, err)
+
+	// Immediately valid.
+	_, err = p.ValidateToken(ctx, resp.AccessToken)
+	assert.NoError(t, err, "access token should be valid right after issuance")
+
+	// Wait past the access token's expiry but well within the refresh window.
+	time.Sleep(2 * time.Second)
+
+	// The access token is now rejected.
+	_, err = p.ValidateToken(ctx, resp.AccessToken)
+	assert.Error(t, err, "access token should have expired")
+
+	// The refresh token still works, and yields a valid new access token.
+	newResp, err := p.RefreshToken(ctx, resp.RefreshToken)
+	require.NoError(t, err, "refresh token should still be accepted")
+	require.NotEmpty(t, newResp.AccessToken)
+
+	_, err = p.ValidateToken(ctx, newResp.AccessToken)
+	assert.NoError(t, err, "fresh access token should validate")
 }
